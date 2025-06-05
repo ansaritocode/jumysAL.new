@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../firebase';
-import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, QueryDocumentSnapshot } from 'firebase/firestore';
 import { Post, UserData } from '../types';
 import { useLanguage } from '../contexts/LanguageContext';
 
