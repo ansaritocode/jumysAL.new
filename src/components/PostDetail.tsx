@@ -17,6 +17,7 @@ const PostDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { t } = useLanguage();
+  const [showChatModal, setShowChatModal] = useState(false);
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -433,6 +434,8 @@ ${userData.portfolio}` : ''}
             {!isEmployer && user && post.userId && (
               <div className="mt-6 flex flex-col space-y-4 sm:flex-row sm:space-y-0 sm:space-x-4">
                 <CreateChat 
+                  post={post}
+                  onClose={() => setShowChatModal(false)}
                   recipientId={post.userId}
                   postId={id || ''}
                   postTitle={post.title || 'Вакансия'}
@@ -456,6 +459,18 @@ ${userData.portfolio}` : ''}
           </div>
         </div>
       </div>
+
+      {showChatModal && (
+        <CreateChat
+          post={post}
+          onClose={() => setShowChatModal(false)}
+          recipientId={post.userId}
+          postId={post.id}
+          postTitle={post.title}
+          initiateButtonText="Contact Employer"
+          buttonClassName="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+        />
+      )}
     </div>
   );
 };
