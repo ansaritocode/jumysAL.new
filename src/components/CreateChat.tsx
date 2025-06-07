@@ -1,184 +1,152 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { collection, addDoc, serverTimestamp, getDoc, doc, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../firebase';
+import { collection, addDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { Post, UserData } from '../types';
+import { motion } from 'framer-motion';
+import { FaEnvelope, FaCheck, FaTimes } from 'react-icons/fa';
+import { useTranslation } from 'react-i18next';
 
 interface CreateChatProps {
-  recipientId: string;
-  postId?: string;
-  postTitle?: string;
-  initiateButtonText?: string;
-  onChatCreated?: (chatId: string) => void;
-  buttonClassName?: string;
+  post: Post;
+  onClose: () => void;
 }
 
-const CreateChat: React.FC<CreateChatProps> = ({
-  recipientId,
-  postId,
-  postTitle,
-  initiateButtonText = 'Начать чат',
-  onChatCreated,
-  buttonClassName = "inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-primary-dark dark:bg-accent dark:hover:bg-accent-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary dark:focus:ring-accent"
-}) => {
+const CreateChat: React.FC<CreateChatProps> = ({ post, onClose }) => {
   const [user] = useAuthState(auth);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const [success, setSuccess] = useState(false);
+  const { t } = useTranslation();
 
   const handleCreateChat = async () => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    if (user.uid === recipientId) {
-      setError('Вы не можете создать чат с самим собой');
-      return;
-    }
+    if (!user) return;
 
     try {
       setLoading(true);
       setError(null);
-      console.log("Creating chat with recipient:", recipientId);
 
-      // Check if recipient exists
-      const recipientDoc = await getDoc(doc(db, 'users', recipientId));
-      if (!recipientDoc.exists()) {
-        console.error("Recipient not found:", recipientId);
-        throw new Error('Пользователь не найден');
+      // Get employer data
+      const employerDoc = await getDoc(doc(db, 'users', post.userId!));
+      if (!employerDoc.exists()) {
+        throw new Error(t('errors.employerNotFound'));
       }
-      console.log("Recipient found:", recipientDoc.data());
 
-      // Check if a chat already exists between these users
-      const existingChatsQuery = query(
-        collection(db, 'chats'),
-        where('participants', 'array-contains', user.uid)
-      );
+      const employer = employerDoc.data() as UserData;
 
-      const existingChatsSnapshot = await getDocs(existingChatsQuery);
-      let existingChatId: string | null = null;
-
-      existingChatsSnapshot.forEach(doc => {
-        const chatData = doc.data();
-        if (chatData.participants.includes(recipientId)) {
-          existingChatId = doc.id;
-          console.log("Found existing chat:", existingChatId);
+      // Create chat
+      const chatRef = await addDoc(collection(db, 'chats'), {
+        participants: [user.uid, post.userId],
+        postId: post.id,
+        createdAt: new Date(),
+        lastMessage: null,
+        unreadCount: {
+          [user.uid]: 0,
+          [post.userId!]: 1
         }
       });
 
-      if (existingChatId) {
-        // Chat already exists, navigate to it
-        console.log("Navigating to existing chat:", existingChatId);
-        if (onChatCreated) {
-          onChatCreated(existingChatId);
-        } else {
-          navigate(`/chat/${existingChatId}`);
-        }
-        setLoading(false);
-        return;
-      }
+      // Add initial message
+      await addDoc(collection(db, `chats/${chatRef.id}/messages`), {
+        text: t('chat.initialMessage', { postTitle: post.title }),
+        senderId: user.uid,
+        timestamp: new Date(),
+        read: false
+      });
 
-      // Create a new chat
-      console.log("Creating new chat between", user.uid, "and", recipientId);
-      const chatData = {
-        participants: [user.uid, recipientId],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        lastMessage: '',
-        unreadCount: {
-          [user.uid]: 0,
-          [recipientId]: 0
-        }
-      };
-
-      // Add reference to post if applicable
-      if (postId) {
-        chatData.postId = postId;
-        chatData.postTitle = postTitle || '';
-        console.log("Adding post reference:", postId, postTitle);
-      }
-
-      const chatRef = await addDoc(collection(db, 'chats'), chatData);
-      console.log("Chat created with ID:", chatRef.id);
-
-      // If first message should be sent right away
-      if (postId && postTitle) {
-        const messageData = {
-          text: `Здравствуйте! Я заинтересован(-а) в вакансии "${postTitle}"`,
+      // Update last message
+      await updateDoc(doc(db, 'chats', chatRef.id), {
+        lastMessage: {
+          text: t('chat.initialMessage', { postTitle: post.title }),
           senderId: user.uid,
-          createdAt: serverTimestamp(),
-          status: 'sent',
-          type: 'text'
-        };
+          timestamp: new Date()
+        }
+      });
 
-        console.log("Sending first message");
-        const messageRef = await addDoc(
-          collection(db, 'chats', chatRef.id, 'messages'), 
-          messageData
-        );
-        console.log("First message sent with ID:", messageRef.id);
-
-        // Update chat with the last message
-        await updateDoc(doc(db, 'chats', chatRef.id), {
-          lastMessage: messageData.text,
-          updatedAt: serverTimestamp(),
-          [`unreadCount.${recipientId}`]: 1
-        });
-        console.log("Chat document updated with last message");
-      }
-
-      setLoading(false);
-      
-      if (onChatCreated) {
-        onChatCreated(chatRef.id);
-      } else {
-        console.log("Navigating to new chat:", chatRef.id);
-        navigate(`/chat/${chatRef.id}`);
-      }
+      setSuccess(true);
+      setTimeout(() => {
+        onClose();
+        window.location.href = `/chat/${chatRef.id}`;
+      }, 1500);
     } catch (err) {
       console.error('Error creating chat:', err);
-      let errorMessage = 'Не удалось создать чат. Пожалуйста, попробуйте позже.';
-      
-      if (err instanceof Error) {
-        if (err.message === 'Пользователь не найден') {
-          errorMessage = 'Пользователь не найден. Возможно, аккаунт был удален.';
-        }
-        // Add more specific error handling as needed
-        console.error('Error details:', err.message);
-      }
-      
-      setError(errorMessage);
+      setError(t('errors.createChat'));
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <>
-      <button
-        onClick={handleCreateChat}
-        disabled={loading}
-        className={buttonClassName}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full"
       >
-        {loading ? (
-          <>
-            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Создание...
-          </>
-        ) : (
-          initiateButtonText
-        )}
-      </button>
-      
-      {error && (
-        <div className="mt-2 text-sm text-red-600 dark:text-red-400">
-          {error}
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            {t('chat.create')}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+          >
+            <FaTimes className="w-5 h-5" />
+          </button>
         </div>
-      )}
-    </>
+
+        <div className="mb-6">
+          <p className="text-gray-600 dark:text-gray-300">
+            {t('chat.createDescription')}
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-md">
+            <div className="flex items-center text-red-600 dark:text-red-400">
+              <FaTimes className="mr-2" />
+              <span>{error}</span>
+            </div>
+          </div>
+        )}
+
+        {success && (
+          <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/20 rounded-md">
+            <div className="flex items-center text-green-600 dark:text-green-400">
+              <FaCheck className="mr-2" />
+              <span>{t('chat.created')}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end space-x-4">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white"
+            disabled={loading}
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            onClick={handleCreateChat}
+            disabled={loading}
+            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                {t('common.loading')}
+              </div>
+            ) : (
+              <div className="flex items-center">
+                <FaEnvelope className="mr-2" />
+                {t('chat.start')}
+              </div>
+            )}
+          </button>
+        </div>
+      </motion.div>
+    </div>
   );
 };
 

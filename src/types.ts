@@ -38,6 +38,10 @@ export interface Post {
   city?: string;
   category?: string;
   responsibilities?: string[];
+  gradeRange?: {
+    min: number;
+    max: number;
+  };
 }
 
 export interface User {
