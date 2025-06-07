@@ -10,9 +10,22 @@ import { useTranslation } from 'react-i18next';
 interface CreateChatProps {
   post: Post;
   onClose: () => void;
+  recipientId?: string;
+  postId?: string;
+  postTitle?: string;
+  initiateButtonText?: string;
+  buttonClassName?: string;
 }
 
-const CreateChat: React.FC<CreateChatProps> = ({ post, onClose }) => {
+const CreateChat: React.FC<CreateChatProps> = ({ 
+  post, 
+  onClose, 
+  recipientId, 
+  postId, 
+  postTitle, 
+  initiateButtonText = 'Start Chat', 
+  buttonClassName = 'px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600' 
+}) => {
   const [user] = useAuthState(auth);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +143,7 @@ const CreateChat: React.FC<CreateChatProps> = ({ post, onClose }) => {
           <button
             onClick={handleCreateChat}
             disabled={loading}
-            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className={buttonClassName}
           >
             {loading ? (
               <div className="flex items-center">
@@ -140,7 +153,7 @@ const CreateChat: React.FC<CreateChatProps> = ({ post, onClose }) => {
             ) : (
               <div className="flex items-center">
                 <FaEnvelope className="mr-2" />
-                {t('chat.start')}
+                {initiateButtonText}
               </div>
             )}
           </button>

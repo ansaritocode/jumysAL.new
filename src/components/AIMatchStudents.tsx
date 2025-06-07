@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, db } from '../firebase';
-import { collection, getDocs, query, where, doc } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, setDoc, updateDoc } from 'firebase/firestore';
 import { UserData, Post } from '../types';
 import { motion } from 'framer-motion';
 import { FaUser, FaGraduationCap, FaBriefcase, FaStar, FaEnvelope, FaCheck } from 'react-icons/fa';
@@ -146,36 +146,44 @@ const AIMatchStudents: React.FC<{ post: Post }> = ({ post }) => {
   };
 
   const handleContact = async (student: MatchedStudent) => {
-    if (!user) return;
+    if (!user || !post) return;
 
     try {
-      // Create a new chat
+      setLoading(true);
+      setError(null);
+
+      // Create chat document
       const chatRef = doc(collection(db, 'chats'));
-      await chatRef.set({
+      await setDoc(chatRef, {
         participants: [user.uid, student.uid],
+        postId: post.id,
+        postTitle: post.title,
         createdAt: new Date(),
-        lastMessage: null,
+        lastMessage: {
+          text: `Hi ${student.displayName}, I'm interested in your profile for the ${post.title} position.`,
+          senderId: user.uid,
+          timestamp: new Date()
+        },
         unreadCount: {
-          [user.uid]: 0,
-          [student.uid]: 1
+          [student.uid]: 1,
+          [user.uid]: 0
         }
       });
 
-      // Add initial message
-      const messageRef = doc(collection(chatRef, 'messages'));
-      await messageRef.set({
-        text: t('chat.initialMessage', { postTitle: post.title }),
-        senderId: user.uid,
-        timestamp: new Date(),
-        read: false
-      });
-
-      // Update last message
-      await chatRef.update({
+      // Update last message in chat document
+      await updateDoc(chatRef, {
         lastMessage: {
-          text: t('chat.initialMessage', { postTitle: post.title }),
+          text: `Hi ${student.displayName}, I'm interested in your profile for the ${post.title} position.`,
           senderId: user.uid,
           timestamp: new Date()
+        }
+      });
+
+      // Update unread count
+      await updateDoc(chatRef, {
+        unreadCount: {
+          [student.uid]: 1,
+          [user.uid]: 0
         }
       });
 
@@ -183,6 +191,8 @@ const AIMatchStudents: React.FC<{ post: Post }> = ({ post }) => {
     } catch (err) {
       console.error('Error creating chat:', err);
       setError(t('errors.createChat'));
+    } finally {
+      setLoading(false);
     }
   };
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, Component, ErrorInfo } from 'r
 import { Link, useNavigate } from 'react-router-dom';
 import { collection, getDocs, query, where, doc, getDoc, setDoc, deleteDoc, Firestore, limit, updateDoc, arrayUnion, arrayRemove, orderBy } from 'firebase/firestore';
 import { db, auth } from '../firebase';
+import { useAuthState } from 'react-firebase-hooks/auth';
 import { useAuth } from '../context/AuthContext';
 import { Post, UserData } from '../types';
 import CreateChat from './CreateChat';
